@@ -1,0 +1,132 @@
+service: sls-aws-scheduler-tasks
+frameworkVersion: "3"
+
+plugins:
+  - serverless-deployment-bucket
+  - serverless-offline
+  - serverless-plugin-optimize
+  - serverless-prune-plugin
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  stage: "${opt:stage, 'hml'}"
+  region: us-east-1
+  deploymentBucket:
+    name: "${self:service}-${self:provider.region}-deployments-lambdas"
+    blockPublicAccess: true
+  environment:
+    QUEUE_ARN: !GetAtt SchedulerQueue.Arn
+    SCHEDULER_ROLE_ARN: !GetAtt SchedulerRole.Arn
+    REGION: "${self:provider.region}"
+  httpApi:
+    payload: "2.0"
+  iam:
+    role:
+      statements:
+        - Effect: "Allow"
+          Action:
+            - "scheduler:CreateSchedule"
+          Resource: "*"
+        - Effect: "Allow"
+          Action:
+            - "iam:PassRole"
+          Resource: !GetAtt SchedulerRole.Arn
+
+custom:
+  SCHEDULER_QUEUE_NAME: "${opt:stage, self:provider.stage}-scheduler-tasks-queue"
+
+resources:
+  Resources:
+    SchedulerQueue:
+      Type: "AWS::SQS::Queue"
+      Properties:
+        QueueName: "${self:custom.SCHEDULER_QUEUE_NAME}.fifo"
+        FifoQueue: true
+        ContentBasedDeduplication: true
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt SchedulerQueueDql.Arn
+          maxReceiveCount: 3
+
+    SchedulerQueueDql:
+      Type: "AWS::SQS::Queue"
+      Properties:
+        FifoQueue: true
+        QueueName: "${self:custom.SCHEDULER_QUEUE_NAME}-dlq.fifo"
+
+    # SchedulerQueuePolicy:
+    #   Type: "AWS::SQS::QueuePolicy"
+    #   Properties:
+    #     Queues:
+    #       - Ref: SchedulerQueue
+    #     PolicyDocument:
+    #       Version: "2012-10-17"
+    #       Statement:
+    #         - Effect: Allow
+    #           Principal: "*"
+    #           Action: "sqs:SendMessage"
+    #           Resource: !GetAtt SchedulerQueue.Arn
+    #           Condition:
+    #             ArnEquals:
+    #               "aws:SourceArn": !GetAtt SchedulerQueue.Arn
+
+    SchedulerRole:
+      Type: "AWS::IAM::Role"
+      Properties:
+        RoleName: SchedulerRole
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - scheduler.amazonaws.com
+              Action: "sts:AssumeRole"
+
+        Policies:
+          - PolicyName: SchedulerPolicy
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - "sqs:SendMessage"
+                  Resource: !GetAtt SchedulerQueue.Arn
+
+functions:
+  SchedulerProducer:
+    timeout: 10
+    memorySize: 128
+    handler: build/scheduler-producer.handler
+    events:
+      - http:
+          path: /scheduler-producer
+          method: get
+          private: true
+
+  SchedulerConsumer:
+    timeout: 10
+    memorySize: 128
+    handler: build/scheduler-consumer.handler
+    events:
+      - sqs:
+          arn: !GetAtt SchedulerQueue.Arn
+          batchSize: 1
+
+package:
+  individually: true
+  patterns:
+    - src/**
+    - node_modules/**
+    - package.json
+    - package-lock.json
+    - tsconfig.json
+    - README.md
+    - .nvmrc
+    - .gitignore
+    - .git/**
+    - .env
+    - .serverless/**
+    - .serverless
+    - .vscode/**
+    - .vscode

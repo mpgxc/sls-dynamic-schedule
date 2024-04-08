@@ -1,0 +1,31 @@
+{
+  "name": "sls-aws-scheduler-tasks",
+  "version": "1.0.0",
+  "description": "Example of creating a function that runs as a cron job using the serverless `schedule` event",
+  "author": "mpgxc",
+  "license": "MIT",
+  "scripts": {
+    "prebuild": "rimraf build",
+    "build": "npx tsc --build tsconfig.json",
+    "predeploy": "npm run build",
+    "deploy": "node_modules/.bin/serverless deploy --verbose --stage hml",
+    "start:dev": "nodemon --exec npx sls offline --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@aws-sdk/client-eventbridge": "^3.549.0",
+    "@aws-sdk/client-lambda": "^3.549.0",
+    "@aws-sdk/client-scheduler": "^3.549.0"
+  },
+  "devDependencies": {
+    "@tsconfig/node20": "^20.1.4",
+    "@types/node": "^20.12.5",
+    "nodemon": "^3.1.0",
+    "rimraf": "^5.0.5",
+    "serverless": "^3.38.0",
+    "serverless-deployment-bucket": "^1.6.0",
+    "serverless-offline": "^13.3.3",
+    "serverless-plugin-optimize": "^4.2.1-rc.1",
+    "serverless-prune-plugin": "^2.0.2",
+    "typescript": "^5.4.4"
+  }
+}

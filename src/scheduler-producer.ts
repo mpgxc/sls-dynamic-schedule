@@ -23,6 +23,7 @@ export class TaskSchedulerProducerImpl implements TaskSchedulerProducer {
       ScheduleExpression: "rate(1 minutes)",
       ScheduleExpressionTimezone: "UTC",
       ClientToken: randomUUID(),
+      GroupName: process.env.SCHEDULER_GROUP_NAME!,
       FlexibleTimeWindow: {
         Mode: "OFF",
       },

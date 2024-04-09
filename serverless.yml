@@ -18,6 +18,8 @@ provider:
   environment:
     QUEUE_ARN: !GetAtt SchedulerQueue.Arn
     SCHEDULER_ROLE_ARN: !GetAtt SchedulerRole.Arn
+    SCHEDULER_GROUP_NAME: "${self:custom.SCHEDULER_GROUP_NAME}"
+
     REGION: "${self:provider.region}"
   httpApi:
     payload: "2.0"
@@ -35,6 +37,7 @@ provider:
 
 custom:
   SCHEDULER_QUEUE_NAME: "${opt:stage, self:provider.stage}-scheduler-tasks-queue"
+  SCHEDULER_GROUP_NAME: "${opt:stage, self:provider.stage}-scheduler-tasks-group"
 
 resources:
   Resources:
@@ -54,21 +57,10 @@ resources:
         FifoQueue: true
         QueueName: "${self:custom.SCHEDULER_QUEUE_NAME}-dlq.fifo"
 
-    # SchedulerQueuePolicy:
-    #   Type: "AWS::SQS::QueuePolicy"
-    #   Properties:
-    #     Queues:
-    #       - Ref: SchedulerQueue
-    #     PolicyDocument:
-    #       Version: "2012-10-17"
-    #       Statement:
-    #         - Effect: Allow
-    #           Principal: "*"
-    #           Action: "sqs:SendMessage"
-    #           Resource: !GetAtt SchedulerQueue.Arn
-    #           Condition:
-    #             ArnEquals:
-    #               "aws:SourceArn": !GetAtt SchedulerQueue.Arn
+    SchedulerGroup:
+      Type: "AWS::Scheduler::ScheduleGroup"
+      Properties:
+        Name: "${self:custom.SCHEDULER_GROUP_NAME}"
 
     SchedulerRole:
       Type: "AWS::IAM::Role"
@@ -79,9 +71,11 @@ resources:
           Statement:
             - Effect: Allow
               Principal:
-                Service:
-                  - scheduler.amazonaws.com
+                Service: scheduler.amazonaws.com
               Action: "sts:AssumeRole"
+              Condition:
+                StringEquals:
+                  "aws:SourceAccount": !Ref "AWS::AccountId"
 
         Policies:
           - PolicyName: SchedulerPolicy
@@ -89,9 +83,22 @@ resources:
               Version: "2012-10-17"
               Statement:
                 - Effect: Allow
-                  Action:
-                    - "sqs:SendMessage"
+                  Action: "sqs:SendMessage"
                   Resource: !GetAtt SchedulerQueue.Arn
+
+    SchedulerQueuePolicy:
+      Type: "AWS::SQS::QueuePolicy"
+      Properties:
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: scheduler.amazonaws.com
+              Action: "sqs:SendMessage"
+              Resource: !GetAtt SchedulerQueue.Arn
+        Queues:
+          - Ref: SchedulerQueue
 
 functions:
   SchedulerProducer:
@@ -102,7 +109,6 @@ functions:
       - http:
           path: /scheduler-producer
           method: get
-          private: true
 
   SchedulerConsumer:
     timeout: 10

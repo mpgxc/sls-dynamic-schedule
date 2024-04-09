@@ -10,41 +10,42 @@ plugins:
 provider:
   name: aws
   runtime: nodejs20.x
-  stage: "${opt:stage, 'hml'}"
+  stage: ${opt:stage, 'hml'}
   region: us-east-1
   deploymentBucket:
-    name: "${self:service}-${self:provider.region}-deployments-lambdas"
+    name: ${self:service}-${self:provider.region}-deployments-lambdas
     blockPublicAccess: true
   environment:
-    QUEUE_ARN: !GetAtt SchedulerQueue.Arn
-    SCHEDULER_ROLE_ARN: !GetAtt SchedulerRole.Arn
-    SCHEDULER_GROUP_NAME: "${self:custom.SCHEDULER_GROUP_NAME}"
-
-    REGION: "${self:provider.region}"
+    QUEUE_ARN: ${self:custom.queueArn}
+    SCHEDULER_ROLE_ARN: ${self:custom.schedulerRoleArn}
+    SCHEDULER_GROUP_NAME: ${self:custom.schedulerGroupName}
+    REGION: ${self:provider.region}
   httpApi:
     payload: "2.0"
   iam:
     role:
       statements:
-        - Effect: "Allow"
+        - Effect: Allow
           Action:
-            - "scheduler:CreateSchedule"
+            - scheduler:CreateSchedule
           Resource: "*"
-        - Effect: "Allow"
+        - Effect: Allow
           Action:
-            - "iam:PassRole"
-          Resource: !GetAtt SchedulerRole.Arn
+            - iam:PassRole
+          Resource: ${self:custom.schedulerRoleArn}
 
 custom:
-  SCHEDULER_QUEUE_NAME: "${opt:stage, self:provider.stage}-scheduler-tasks-queue"
-  SCHEDULER_GROUP_NAME: "${opt:stage, self:provider.stage}-scheduler-tasks-group"
+  queueName: ${opt:stage, self:provider.stage}-scheduler-tasks-queue
+  schedulerGroupName: ${opt:stage, self:provider.stage}-scheduler-tasks-group
+  queueArn: !GetAtt SchedulerQueue.Arn
+  schedulerRoleArn: !GetAtt SchedulerRole.Arn
 
 resources:
   Resources:
     SchedulerQueue:
-      Type: "AWS::SQS::Queue"
+      Type: AWS::SQS::Queue
       Properties:
-        QueueName: "${self:custom.SCHEDULER_QUEUE_NAME}.fifo"
+        QueueName: ${self:custom.queueName}.fifo
         FifoQueue: true
         ContentBasedDeduplication: true
         RedrivePolicy:
@@ -52,18 +53,18 @@ resources:
           maxReceiveCount: 3
 
     SchedulerQueueDql:
-      Type: "AWS::SQS::Queue"
+      Type: AWS::SQS::Queue
       Properties:
         FifoQueue: true
-        QueueName: "${self:custom.SCHEDULER_QUEUE_NAME}-dlq.fifo"
+        QueueName: ${self:custom.queueName}-dlq.fifo
 
     SchedulerGroup:
-      Type: "AWS::Scheduler::ScheduleGroup"
+      Type: AWS::Scheduler::ScheduleGroup
       Properties:
-        Name: "${self:custom.SCHEDULER_GROUP_NAME}"
+        Name: ${self:custom.schedulerGroupName}
 
     SchedulerRole:
-      Type: "AWS::IAM::Role"
+      Type: AWS::IAM::Role
       Properties:
         RoleName: SchedulerRole
         AssumeRolePolicyDocument:
@@ -71,32 +72,31 @@ resources:
           Statement:
             - Effect: Allow
               Principal:
-                Service: scheduler.amazonaws.com
-              Action: "sts:AssumeRole"
+                Service: "scheduler.amazonaws.com"
+              Action: sts:AssumeRole
               Condition:
                 StringEquals:
-                  "aws:SourceAccount": !Ref "AWS::AccountId"
-
+                  aws:SourceAccount: ${aws:accountId}
         Policies:
           - PolicyName: SchedulerPolicy
             PolicyDocument:
               Version: "2012-10-17"
               Statement:
                 - Effect: Allow
-                  Action: "sqs:SendMessage"
-                  Resource: !GetAtt SchedulerQueue.Arn
+                  Action: sqs:SendMessage
+                  Resource: ${self:custom.queueArn}
 
     SchedulerQueuePolicy:
-      Type: "AWS::SQS::QueuePolicy"
+      Type: AWS::SQS::QueuePolicy
       Properties:
         PolicyDocument:
           Version: "2012-10-17"
           Statement:
             - Effect: Allow
               Principal:
-                Service: scheduler.amazonaws.com
-              Action: "sqs:SendMessage"
-              Resource: !GetAtt SchedulerQueue.Arn
+                Service: "scheduler.amazonaws.com"
+              Action: sqs:SendMessage
+              Resource: ${self:custom.queueArn}
         Queues:
           - Ref: SchedulerQueue
 
@@ -116,7 +116,7 @@ functions:
     handler: build/scheduler-consumer.handler
     events:
       - sqs:
-          arn: !GetAtt SchedulerQueue.Arn
+          arn: ${self:custom.queueArn}
           batchSize: 1
 
 package:

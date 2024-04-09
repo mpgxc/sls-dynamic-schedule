@@ -9,6 +9,7 @@
     "build": "npx tsc --build tsconfig.json",
     "predeploy": "npm run build",
     "deploy": "node_modules/.bin/serverless deploy --verbose --stage hml",
+    "remove": "node_modules/.bin/serverless remove --verbose --stage hml",
     "start:dev": "nodemon --exec npx sls offline --host 0.0.0.0"
   },
   "dependencies": {
